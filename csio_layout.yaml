@@ -1,0 +1,264 @@
+version: csio-240-v1
+layouts:
+  MHG:
+    description: Message Header
+    fields:
+    - name: sender_id
+      start: 0
+      length: 10
+      meaning: Originating system ID
+    - name: receiver_id
+      start: 10
+      length: 10
+      meaning: Destination system ID
+    - name: batch_number
+      start: 20
+      length: 6
+      meaning: Batch / sequence number
+    - name: company_id
+      start: 26
+      length: 4
+      meaning: Company or broker code
+    - name: standard
+      start: 30
+      length: 4
+      meaning: Standard type (CSIO)
+    - name: download_type
+      start: 34
+      length: 8
+      meaning: Download type (HOME/ AUTO DL)
+    - name: file_seq
+      start: 42
+      length: 10
+      meaning: Transmission sequence
+  TRG:
+    description: Transmission Record
+    fields:
+    - name: download_id
+      start: 0
+      length: 6
+      meaning: Download control number
+    - name: carrier
+      start: 6
+      length: 3
+      meaning: Carrier code
+    - name: broker
+      start: 9
+      length: 3
+      meaning: Broker code
+    - name: dl_type
+      start: 12
+      length: 8
+      meaning: Download type (HOME/AUTO)
+  TCG:
+    description: Trading partner block
+    fields:
+    - name: trading_id
+      start: 0
+      length: 10
+      meaning: Trading partner/control
+  BIS:
+    description: Basic Insured
+    fields:
+    - name: sequence_id
+      start: 0
+      length: 6
+      meaning: Record sequence/key
+    - name: insured_name
+      start: 22
+      length: 40
+      meaning: Named insured(s)
+  9BIS:
+    description: Insured address
+    fields:
+    - name: sequence_id
+      start: 0
+      length: 6
+      meaning: Record sequence/key
+    - name: street
+      start: 22
+      length: 40
+      meaning: Street address
+    - name: city
+      start: 64
+      length: 28
+      meaning: City
+    - name: province
+      start: 92
+      length: 3
+      meaning: Province
+    - name: postal
+      start: 95
+      length: 7
+      meaning: Postal code
+  BPI:
+    description: Policy header
+    fields:
+    - name: policy_number
+      start: 22
+      length: 18
+      meaning: 'Carrier policy/download #'
+    - name: lob_code
+      start: 60
+      length: 4
+      meaning: HAL/HABL...
+    - name: effective_raw
+      start: 96
+      length: 8
+      meaning: YYYYMMDD (eff)
+    - name: expiry_raw
+      start: 104
+      length: 8
+      meaning: YYYYMMDD (exp)
+  PAY:
+    description: Payment plan
+    fields:
+    - name: plan_type
+      start: 22
+      length: 2
+      meaning: MO/AN/etc.
+    - name: amount_1_raw
+      start: 180
+      length: 11
+      meaning: Amount 1
+    - name: date_1_raw
+      start: 191
+      length: 8
+      meaning: YYYYMMDD
+    - name: amount_2_raw
+      start: 199
+      length: 11
+      meaning: Amount 2
+    - name: date_2_raw
+      start: 210
+      length: 8
+      meaning: YYYYMMDD
+  LAG:
+    description: Risk location address
+    fields:
+    - name: street
+      start: 22
+      length: 40
+      meaning: Civic + street
+    - name: city
+      start: 64
+      length: 28
+      meaning: City
+    - name: province
+      start: 92
+      length: 3
+      meaning: Province
+    - name: postal
+      start: 95
+      length: 7
+      meaning: Postal code
+  CVH:
+    description: Home coverage/endorsement/discount
+    fields:
+    - name: coverage_code
+      start: 22
+      length: 6
+      meaning: e.g., WINDC, HAILC, WATER, ZEWDP, DISNS…
+    - name: premium_raw
+      start: 60
+      length: 11
+      meaning: Premium (+/-)
+    - name: limit_raw
+      start: 120
+      length: 11
+      meaning: Limit
+    - name: ded_raw
+      start: 140
+      length: 5
+      meaning: Deductible
+    - name: desc_tail
+      start: 170
+      length: 60
+      meaning: Description (tail text)
+  AOI:
+    description: Additional interest / mortgagee
+    fields:
+    - name: interest_type
+      start: 22
+      length: 3
+      meaning: MG=mortgagee, AI=additional insured…
+    - name: name
+      start: 32
+      length: 40
+      meaning: Name
+  9AOI:
+    description: Additional interest address
+    fields:
+    - name: street
+      start: 22
+      length: 40
+      meaning: Street
+    - name: city
+      start: 64
+      length: 28
+      meaning: City
+    - name: province
+      start: 92
+      length: 3
+      meaning: Prov
+    - name: postal
+      start: 95
+      length: 7
+      meaning: Postal
+  SAC:
+    description: Auto coverage/endorsement/discount
+    fields:
+    - name: link_ref
+      start: 0
+      length: 18
+      meaning: Link to vehicle/risk (e.g., W10006SAVR10001)
+    - name: coverage_code
+      start: 20
+      length: 6
+      meaning: TPPD/TPBI/COL/CMP/UA/44/…
+  SAV:
+    description: Auto vehicle (YR/MAKE/MODEL/VIN)
+    fields:
+    - name: link_ref
+      start: 0
+      length: 18
+      meaning: Link to vehicle/risk (e.g., W10006SAVR10001)
+  ACH:
+    description: Pending layout
+    fields: []
+  EFT:
+    description: Pending layout
+    fields: []
+  SAD:
+    description: Pending layout
+    fields: []
+  CHG:
+    description: Pending layout
+    fields: []
+  PPH:
+    description: Pending layout
+    fields: []
+  HAL:
+    description: Pending layout
+    fields: []
+  IVC:
+    description: Pending layout
+    fields: []
+  HRU:
+    description: Pending layout
+    fields: []
+  RMK:
+    description: Pending layout
+    fields: []
+  IIG:
+    description: Pending layout
+    fields: []
+  PAH:
+    description: Pending layout
+    fields: []
+  PPI:
+    description: Pending layout
+    fields: []
+  PPS:
+    description: Pending layout
+    fields: []
