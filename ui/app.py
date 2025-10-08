@@ -33,23 +33,57 @@ if 'get_script_run_ctx' in globals():
 # -----------------------------
 # Shared constants and helpers
 # -----------------------------
-from ..core.constants import CODE_MEANING, PRIORITY_TABS
-from .app_helpers import render_policy_summary, render_per_code_tabs, render_exports_sidebar
+try:
+    from ..core.constants import CODE_MEANING, PRIORITY_TABS  # type: ignore
+    from .app_helpers import render_policy_summary, render_per_code_tabs, render_exports_sidebar  # type: ignore
+    from ..core.csio_utils import (  # type: ignore
+        find_dates,
+        find_amounts,
+        find_vin,
+        find_year,
+        find_postal,
+        guess_coverage_code,
+    )
+    from ..core.schema_io import load_schema, save_schema  # type: ignore
+    from ..core.decoder import parse_with_schema  # type: ignore
+except Exception:
+    # Fallback for when this file is executed as a standalone script via Streamlit,
+    # where relative imports are not available (no package context).
+    import importlib, sys
+    from pathlib import Path as _Path
+    _pkg_dir = _Path(__file__).resolve().parents[1]
+    _pkg_parent = str(_pkg_dir.parent)
+    if _pkg_parent not in sys.path:
+        sys.path.insert(0, _pkg_parent)
+    _pkg_name = _pkg_dir.name
+
+    _constants = importlib.import_module(f"{_pkg_name}.core.constants")
+    CODE_MEANING = getattr(_constants, "CODE_MEANING")
+    PRIORITY_TABS = getattr(_constants, "PRIORITY_TABS")
+
+    _helpers = importlib.import_module(f"{_pkg_name}.ui.app_helpers")
+    render_policy_summary = getattr(_helpers, "render_policy_summary")
+    render_per_code_tabs = getattr(_helpers, "render_per_code_tabs")
+    render_exports_sidebar = getattr(_helpers, "render_exports_sidebar")
+
+    _csio = importlib.import_module(f"{_pkg_name}.core.csio_utils")
+    find_dates = getattr(_csio, "find_dates")
+    find_amounts = getattr(_csio, "find_amounts")
+    find_vin = getattr(_csio, "find_vin")
+    find_year = getattr(_csio, "find_year")
+    find_postal = getattr(_csio, "find_postal")
+    guess_coverage_code = getattr(_csio, "guess_coverage_code")
+
+    _schema_io = importlib.import_module(f"{_pkg_name}.core.schema_io")
+    load_schema = getattr(_schema_io, "load_schema")
+    save_schema = getattr(_schema_io, "save_schema")
+
+    _decoder = importlib.import_module(f"{_pkg_name}.core.decoder")
+    parse_with_schema = getattr(_decoder, "parse_with_schema")
 
 # -----------------------------
 # Heuristics/hints
 # -----------------------------
-from ..core.csio_utils import (
-    find_dates,
-    find_amounts,
-    find_vin,
-    find_year,
-    find_postal,
-    guess_coverage_code,
-)
-
-from ..core.schema_io import load_schema, save_schema
-from ..core.decoder import parse_with_schema
 
 
 # -----------------------------
