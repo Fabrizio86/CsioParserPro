@@ -15,7 +15,7 @@ import yaml
 # -----------------------------
 # Meaning mapping (shared)
 # -----------------------------
-from csio_explorer.core.constants import CODE_MEANING
+from .constants import CODE_MEANING
 
 # -----------------------------
 # Helpers (heuristic extractors)

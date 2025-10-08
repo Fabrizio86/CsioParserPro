@@ -33,13 +33,13 @@ if 'get_script_run_ctx' in globals():
 # -----------------------------
 # Shared constants and helpers
 # -----------------------------
-from csio_explorer.core.constants import CODE_MEANING, PRIORITY_TABS
-from csio_explorer.ui.app_helpers import render_policy_summary, render_per_code_tabs, render_exports_sidebar
+from ..core.constants import CODE_MEANING, PRIORITY_TABS
+from .app_helpers import render_policy_summary, render_per_code_tabs, render_exports_sidebar
 
 # -----------------------------
 # Heuristics/hints
 # -----------------------------
-from csio_explorer.core.csio_utils import (
+from ..core.csio_utils import (
     find_dates,
     find_amounts,
     find_vin,
@@ -48,8 +48,8 @@ from csio_explorer.core.csio_utils import (
     guess_coverage_code,
 )
 
-from csio_explorer.core.schema_io import load_schema, save_schema
-from csio_explorer.core.decoder import parse_with_schema
+from ..core.schema_io import load_schema, save_schema
+from ..core.decoder import parse_with_schema
 
 
 # -----------------------------

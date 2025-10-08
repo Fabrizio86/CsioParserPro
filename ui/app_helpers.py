@@ -13,8 +13,8 @@ from typing import Dict, Any, List
 import pandas as pd
 import streamlit as st
 
-from csio_explorer.core.constants import CODE_MEANING, BASE_COLUMNS, COMPUTED_COLUMNS
-from csio_explorer.core.csio_utils import canonicalize_display_columns
+from ..core.constants import CODE_MEANING, BASE_COLUMNS, COMPUTED_COLUMNS
+from ..core.csio_utils import canonicalize_display_columns
 
 
 def compute_display_columns(dfc: pd.DataFrame, layout_fields: List[Dict[str, Any]], show_prov_overlays: bool) -> List[str]:
@@ -73,7 +73,7 @@ def render_policy_summary(parsed: Dict[str, pd.DataFrame], schema: Dict[str, Any
     except Exception:
         has_policy = False
     if not has_policy:
-        from csio_explorer.core.csio_utils import safe_slice as _safe_slice
+        from ..core.csio_utils import safe_slice as _safe_slice
         src_col = "body_raw" if "body_raw" in bpi_df.columns else ("body" if "body" in bpi_df.columns else None)
         if src_col:
             bpi_df["policy_number"] = bpi_df[src_col].astype(str).apply(lambda s: _safe_slice(s, 22, 18).strip())

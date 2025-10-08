@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Dict, Any, Tuple, List
 import pandas as pd
 
-from csio_explorer.core.csio_utils import (
+from .csio_utils import (
     safe_slice,
     find_dates,
     find_amounts,
@@ -31,16 +31,16 @@ from csio_explorer.core.csio_utils import (
     collapse_spaces,
     extract_dates_generic,
 )
-from csio_explorer.core.tokenizer import parse_lines
+from .tokenizer import parse_lines
 
 # Meaning mapping (shared)
-from csio_explorer.core.constants import CODE_MEANING
+from .constants import CODE_MEANING
 
 
 def sac_decode_from_body(body: str) -> dict:
     """Extract premium/limit/deductible from SAC body text by scanning numeric blocks.
     This is a heuristic: last money block is premium, previous is limit; deductible is a 3-5 digit number just before last money block (assumed dollars)."""
-    from csio_explorer.core.csio_utils import MONEY_BLOCK, normalize_money_block
+    from .csio_utils import MONEY_BLOCK, normalize_money_block
     import re
 
     out = {"premium": "", "limit": "", "deductible": ""}
@@ -230,7 +230,7 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
                 _assign("link_ref", mm.group("link_ref"))
                 rest = mm.group("rest")
                 # vehicle heuristics
-                from csio_explorer.core.csio_utils import find_vin as _fvin, find_year as _fyr, find_make_model as _fmm
+                from .csio_utils import find_vin as _fvin, find_year as _fyr, find_make_model as _fmm
                 vin = _fvin(rest)
                 yr = _fyr(rest)
                 mk, mdl = _fmm(rest)
@@ -357,7 +357,7 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
                 if exp_n:
                     out["expiry"] = exp_n
             if str(code) == "SAV":
-                from csio_explorer.core.csio_utils import find_vin as _fvin, find_year as _fyr, find_make_model as _fmm
+                from .csio_utils import find_vin as _fvin, find_year as _fyr, find_make_model as _fmm
                 if not out.get("vin"):
                     vin = _fvin(body) or ""
                     if vin:

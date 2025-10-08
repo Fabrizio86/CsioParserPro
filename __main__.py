@@ -46,12 +46,15 @@ def main():
             # Try relative import when running as a package (python -m csio_explorer)
             from .ui import app as app_mod  # type: ignore
         except Exception:
-            # Fallback for direct script execution: add package parent to sys.path and import absolutely
+            # Fallback for direct script execution: add package parent to sys.path and import dynamically
             import sys
-            pkg_parent = str(Path(__file__).resolve().parent.parent)
+            import importlib
+            pkg_dir = Path(__file__).resolve().parent
+            pkg_parent = str(pkg_dir.parent)
             if pkg_parent not in sys.path:
                 sys.path.insert(0, pkg_parent)
-            from csio_explorer.ui import app as app_mod  # type: ignore
+            pkg_name = pkg_dir.name  # derive actual installed package name (e.g., csio_explorer or csioparserpro)
+            app_mod = importlib.import_module(f"{pkg_name}.ui.app")  # type: ignore
 
     app_mod.make_app()
 
