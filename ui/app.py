@@ -10,7 +10,6 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 import io
-import yaml
 from typing import List, Dict, Any
 
 # Safely set page config only when running under Streamlit (avoid ScriptRunContext warning in bare mode)
@@ -44,7 +43,7 @@ try:
         find_postal,
         guess_coverage_code,
     )
-    from ..core.schema_io import load_schema, save_schema  # type: ignore
+    from ..core.schema_io import load_schema, save_schema, dump_schema  # type: ignore
     from ..core.decoder import parse_with_schema  # type: ignore
 except Exception:
     # Fallback for when this file is executed as a standalone script via Streamlit,
@@ -77,6 +76,7 @@ except Exception:
     _schema_io = importlib.import_module(f"{_pkg_name}.core.schema_io")
     load_schema = getattr(_schema_io, "load_schema")
     save_schema = getattr(_schema_io, "save_schema")
+    dump_schema = getattr(_schema_io, "dump_schema")
 
     _decoder = importlib.import_module(f"{_pkg_name}.core.decoder")
     parse_with_schema = getattr(_decoder, "parse_with_schema")
@@ -283,7 +283,7 @@ def make_app():
     if not dd_df.empty:
         st.dataframe(dd_df, hide_index=True, use_container_width=True)
         st.download_button("Download data_dictionary.csv", dd_df.to_csv(index=False).encode("utf-8"), file_name="data_dictionary.csv", mime="text/csv")
-        st.download_button("Download csio_layout.yaml", (default_schema_path.read_text(encoding='utf-8') if default_schema_path.exists() else yaml.safe_dump(schema, sort_keys=False)).encode("utf-8"), file_name="csio_layout.yaml", mime="text/yaml")
+        st.download_button("Download csio_layout.yaml", (default_schema_path.read_text(encoding='utf-8') if default_schema_path.exists() else dump_schema(schema)).encode("utf-8"), file_name="csio_layout.yaml", mime="text/yaml")
 
     # Schema Editor
     st.subheader("Schema Editor")
