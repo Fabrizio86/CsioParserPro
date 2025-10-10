@@ -192,12 +192,23 @@ def make_app():
 
     # Schema controls
     st.sidebar.header("Schema")
+    # Prefer schema next to this file; fall back to project root if not present
     default_schema_path = Path(__file__).with_name("csio_layout.yaml")
+    if not default_schema_path.exists():
+        default_schema_path = Path(__file__).resolve().parents[1] / "csio_layout.yaml"
     schema_bytes = None
     schema_upl = st.sidebar.file_uploader("Load schema (YAML/JSON)", type=["yaml", "yml", "json"], key="schema_uploader")
     if schema_upl is not None:
         schema_bytes = schema_upl.getvalue()
-        schema = load_schema(schema_bytes)
+        try:
+            schema = load_schema(schema_bytes)
+        except Exception as ex:
+            st.error(f"Failed to load uploaded schema: {ex}. Falling back to bundled or empty schema.")
+            # Fall back to bundled default or empty schema
+            try:
+                schema = load_schema(default_schema_path)
+            except Exception:
+                schema = {"version": "csio-240-v1", "layouts": {}}
     else:
         # Load bundled default
         try:
