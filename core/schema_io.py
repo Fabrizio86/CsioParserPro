@@ -30,16 +30,19 @@ def load_schema(src: Any) -> Dict[str, Any]:
             text = src
         else:
             raise TypeError("Unsupported schema source type")
-        # Try YAML first (if available), else JSON
-        try:
-            import yaml  # type: ignore
-            schema = yaml.safe_load(text) or {}
-        except Exception:
+        # Try YAML first (if available), else JSON. If both fail, fall back to empty schema.
+        text_stripped = text.strip()
+        if not text_stripped:
+            schema = {}
+        else:
             try:
-                schema = json.loads(text)
+                import yaml  # type: ignore
+                schema = yaml.safe_load(text) or {}
             except Exception:
-                # Re-raise the original exception when both fail
-                raise
+                try:
+                    schema = json.loads(text)
+                except Exception:
+                    schema = {}
     # Basic validation/sanitization
     version = str(schema.get("version", "csio-240-v1"))
     layouts = schema.get("layouts") or {}

@@ -191,33 +191,66 @@ def render_policy_summary(parsed: Dict[str, pd.DataFrame], schema: Dict[str, Any
 
     # Export Policy to Excel
     raw_df = all_df[all_df.get("policy_group_id") == group_id] if group_id is not None and "policy_group_id" in all_df.columns else pd.DataFrame()
+    # Export to Excel (with graceful fallback if no Excel writer engine is available)
     exp_buf = io.BytesIO()
-    with pd.ExcelWriter(exp_buf, engine="xlsxwriter") as writer:
-        # Summary sheet
-        summ_rows = [{
-            "policy_number": sel_pol,
-            "effective": (pol_rows.get("effective").iloc[0] if "effective" in pol_rows.columns and not pol_rows["effective"].empty else ""),
-            "expiry": (pol_rows.get("expiry").iloc[0] if "expiry" in pol_rows.columns and not pol_rows["expiry"].empty else ""),
-        }]
-        pd.DataFrame(summ_rows).to_excel(writer, index=False, sheet_name="Summary")
-        for nm, dfx in [
-            ("BIS", bis_df),
-            ("9BIS", n9bis_df),
-            ("LAG", lag_df),
-            ("PAY", pay_df),
-            ("CVH", cvh_df),
-            ("AOI_9AOI", pd.concat([aoi_df, n9aoi_df], ignore_index=True, sort=False)),
-            ("raw", raw_df),
-        ]:
-            safe = nm[:31]
-            (dfx if dfx is not None else pd.DataFrame()).to_excel(writer, index=False, sheet_name=safe)
-    exp_buf.seek(0)
-    st.download_button(
-        "Export Policy to Excel",
-        exp_buf.getvalue(),
-        file_name=f"policy_{sel_pol}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    excel_ok = False
+    try:
+        with pd.ExcelWriter(exp_buf, engine="xlsxwriter") as writer:
+            # Summary sheet
+            summ_rows = [{
+                "policy_number": sel_pol,
+                "effective": (pol_rows.get("effective").iloc[0] if "effective" in pol_rows.columns and not pol_rows["effective"].empty else ""),
+                "expiry": (pol_rows.get("expiry").iloc[0] if "expiry" in pol_rows.columns and not pol_rows["expiry"].empty else ""),
+            }]
+            pd.DataFrame(summ_rows).to_excel(writer, index=False, sheet_name="Summary")
+            for nm, dfx in [
+                ("BIS", bis_df),
+                ("9BIS", n9bis_df),
+                ("LAG", lag_df),
+                ("PAY", pay_df),
+                ("CVH", cvh_df),
+                ("AOI_9AOI", pd.concat([aoi_df, n9aoi_df], ignore_index=True, sort=False)),
+                ("raw", raw_df),
+            ]:
+                safe = nm[:31]
+                (dfx if dfx is not None else pd.DataFrame()).to_excel(writer, index=False, sheet_name=safe)
+        excel_ok = True
+    except Exception:
+        # Try openpyxl as a fallback engine
+        exp_buf = io.BytesIO()  # reset buffer
+        try:
+            with pd.ExcelWriter(exp_buf, engine="openpyxl") as writer:
+                summ_rows = [{
+                    "policy_number": sel_pol,
+                    "effective": (pol_rows.get("effective").iloc[0] if "effective" in pol_rows.columns and not pol_rows["effective"].empty else ""),
+                    "expiry": (pol_rows.get("expiry").iloc[0] if "expiry" in pol_rows.columns and not pol_rows["expiry"].empty else ""),
+                }]
+                pd.DataFrame(summ_rows).to_excel(writer, index=False, sheet_name="Summary")
+                for nm, dfx in [
+                    ("BIS", bis_df),
+                    ("9BIS", n9bis_df),
+                    ("LAG", lag_df),
+                    ("PAY", pay_df),
+                    ("CVH", cvh_df),
+                    ("AOI_9AOI", pd.concat([aoi_df, n9aoi_df], ignore_index=True, sort=False)),
+                    ("raw", raw_df),
+                ]:
+                    safe = nm[:31]
+                    (dfx if dfx is not None else pd.DataFrame()).to_excel(writer, index=False, sheet_name=safe)
+            excel_ok = True
+        except Exception:
+            excel_ok = False
+
+    if excel_ok:
+        exp_buf.seek(0)
+        st.download_button(
+            "Export Policy to Excel",
+            exp_buf.getvalue(),
+            file_name=f"policy_{sel_pol}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.warning("Excel export is unavailable because neither 'xlsxwriter' nor 'openpyxl' is installed. Install one of them to enable Excel exports. In the meantime, use the CSV exports below.")
 
 
 def render_per_code_tabs(parsed: Dict[str, pd.DataFrame], schema: Dict[str, Any], all_df: pd.DataFrame, show_prov: bool) -> None:
@@ -288,22 +321,40 @@ def render_exports_sidebar(parsed: Dict[str, pd.DataFrame], all_df: pd.DataFrame
     zip_buf.seek(0)
     st.sidebar.download_button("Export all CSVs (zip)", zip_buf.getvalue(), file_name="csio_per_code.zip", mime="application/zip")
 
-    # Excel workbook
+    # Excel workbook (guarded: try xlsxwriter then openpyxl, otherwise skip with warning)
     excel_buf = io.BytesIO()
-    with pd.ExcelWriter(excel_buf, engine="xlsxwriter") as writer:
-        all_df.to_excel(writer, index=False, sheet_name="ALL")
-        for c in [k for k in parsed.keys() if k not in ("ALL","ALL_RECORDS")]:
-            parsed[c].to_excel(writer, index=False, sheet_name=str(c)[:31])
-        # Try to embed some metadata via a META sheet
-        meta_df = pd.DataFrame([{ "schema_version": schema.get("version"), "code_meaning": __import__('json').dumps(CODE_MEANING) }])
-        meta_df.to_excel(writer, index=False, sheet_name="META")
-    excel_buf.seek(0)
-    st.sidebar.download_button(
-        "Export Excel (all)",
-        excel_buf.getvalue(),
-        file_name="csio_all.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    excel_all_ok = False
+    try:
+        with pd.ExcelWriter(excel_buf, engine="xlsxwriter") as writer:
+            all_df.to_excel(writer, index=False, sheet_name="ALL")
+            for c in [k for k in parsed.keys() if k not in ("ALL","ALL_RECORDS")]:
+                parsed[c].to_excel(writer, index=False, sheet_name=str(c)[:31])
+            meta_df = pd.DataFrame([{ "schema_version": schema.get("version"), "code_meaning": __import__('json').dumps(CODE_MEANING) }])
+            meta_df.to_excel(writer, index=False, sheet_name="META")
+        excel_all_ok = True
+    except Exception:
+        # Fallback to openpyxl
+        excel_buf = io.BytesIO()
+        try:
+            with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
+                all_df.to_excel(writer, index=False, sheet_name="ALL")
+                for c in [k for k in parsed.keys() if k not in ("ALL","ALL_RECORDS")]:
+                    parsed[c].to_excel(writer, index=False, sheet_name=str(c)[:31])
+                meta_df = pd.DataFrame([{ "schema_version": schema.get("version"), "code_meaning": __import__('json').dumps(CODE_MEANING) }])
+                meta_df.to_excel(writer, index=False, sheet_name="META")
+            excel_all_ok = True
+        except Exception:
+            excel_all_ok = False
+    if excel_all_ok:
+        excel_buf.seek(0)
+        st.sidebar.download_button(
+            "Export Excel (all)",
+            excel_buf.getvalue(),
+            file_name="csio_all.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.sidebar.warning("Excel export is unavailable because neither 'xlsxwriter' nor 'openpyxl' is installed. Use the CSV zip export instead or install one of these packages.")
 
     # JSON Lines
     import json
