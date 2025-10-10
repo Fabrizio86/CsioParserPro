@@ -76,6 +76,66 @@ def find_make_model(text: str) -> tuple[str, str]:
 
 # --- Normalizers ---
 
+# Payload cleaning and token splitting per UI requirements
+def clean_payload(s: str) -> str:
+    """Remove any sequences of '?' and trim whitespace from both ends.
+    Example: 'ABC????DEF ' -> 'ABCDEF'
+    """
+    return re.sub(r"\?+", "", (s or "")).strip()
+
+
+def split_on_runs(s: str) -> list[str]:
+    """Split payload on runs of 2+ spaces, preserving single spaces inside literals."""
+    s = (s or "").strip()
+    if not s:
+        return []
+    return [t for t in re.split(r"\s{2,}", s) if t]
+
+
+# Date/Time helpers for compact CSIO tokens
+def decode_csio_date_token(token: str) -> str | None:
+    """Decode compact CSIO date token like CYYMMDD to YYYY-MM-DD.
+    C1->2021, C2->2022, etc. Returns None if not matching.
+    """
+    tok = (token or "").strip()
+    m = re.match(r"^C(\d)(\d{2})(\d{2})$", tok)
+    if not m:
+        return None
+    c, mm, dd = m.groups()
+    try:
+        yyyy = 2020 + int(c)
+        return f"{yyyy}-{mm}-{dd}"
+    except Exception:
+        return None
+
+
+def combine_date_time(date_token: str | None, time_token: str | None) -> str | None:
+    """Combine YYYY-MM-DD and HHMMSS into ISO string YYYY-MM-DDTHH:MM:SS.
+    Returns None if inputs invalid.
+    """
+    d = (date_token or "").strip()
+    t = (time_token or "").strip()
+    if not d or not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+        return None
+    if not re.match(r"^\d{6}$", t):
+        return None
+    hh, mi, ss = t[0:2], t[2:4], t[4:6]
+    return f"{d}T{hh}:{mi}:{ss}"
+
+
+def decode_money(trailing_sign_number: str) -> float | None:
+    """Decode a number with trailing sign into a decimal number.
+    Example: '00000026383+' -> 263.83
+    Returns None if not matching.
+    """
+    s = (trailing_sign_number or "").strip()
+    m = re.match(r"^(\d{1,})([+-])$", s)
+    if not m:
+        return None
+    cents = int(m.group(1))
+    sign = -1 if m.group(2) == '-' else 1
+    return round(sign * cents / 100.0, 2)
+
 # Generic trailing-sign amount token: 8–12 digits followed by +/-
 TRAILING_SIGN_AMOUNT_RE = re.compile(r"\b(\d{8,12})([+-])\b")
 
@@ -142,12 +202,22 @@ def decode_date_token(tok: str) -> str | None:
 
 
 def extract_dates_generic(text: str) -> list[tuple[str, str | None]]:
-    """Collect date tokens and their decoded forms (or None when undecodable)."""
-    out: list[tuple[str, str | None]] = []
-    for m in DATE_TOKEN_RE.finditer(text or ""):
+    """Collect date tokens (including compact CSIO CYYMMDD) and their decoded forms.
+    Preserves left-to-right order of appearance.
+    """
+    s = text or ""
+    items: list[tuple[int, str, str | None]] = []
+    # Standard 6/8 digit or YYYY-MM-DD tokens
+    for m in DATE_TOKEN_RE.finditer(s):
         raw = m.group(1)
-        out.append((raw, decode_date_token(raw)))
-    return out
+        items.append((m.start(), raw, decode_date_token(raw)))
+    # CSIO compact date tokens like C10218 (CYYMMDD where C1->2021)
+    for m in re.finditer(r"\bC\d{5}\b", s):
+        raw = m.group(0)
+        items.append((m.start(), raw, decode_csio_date_token(raw)))
+    # Sort by position to preserve natural order
+    items.sort(key=lambda t: t[0])
+    return [(raw, dec) for (_, raw, dec) in items]
 
 
 def _norm_date(s: str) -> str | None:
@@ -334,3 +404,87 @@ def canonicalize_display_columns(cols: list[str], available: list[str] | set[str
         out.append(c2)
         seen.add(c2)
     return out
+
+# Additional helpers for fixed trailing monetary blocks (limit/deductible/premium)
+import re as _re_ldp
+
+def parse_last_ldp_block(text: str) -> tuple[str | None, str | None, str | None]:
+    """Parse trailing [limit][deductible][premium] numeric block where each subfield
+    is exactly 12 characters long and ends with '+' or '-'. Each represents cents.
+    Returns a tuple (limit, deductible, premium) as dollar strings with two decimals,
+    or (None, None, None) if pattern not found or values all zero.
+    """
+    s = (text or "").rstrip()
+    if not s:
+        return (None, None, None)
+    # Consider the last 64 characters as search window to find a right-aligned block
+    window = s[-64:]
+    m = _re_ldp.search(r"(\d{11}[+-])(\d{11}[+-])(\d{11}[+-])\s*$", window)
+    if not m:
+        return (None, None, None)
+    lim_tok, ded_tok, prem_tok = m.groups()
+
+    def _dec(tok: str) -> tuple[str, bool]:
+        digits, sign = tok[:-1], tok[-1]
+        try:
+            cents = int(digits)
+        except Exception:
+            return ("", False)
+        val = cents / 100.0
+        if sign == '-':
+            val = -val
+        return (f"{val:.2f}", cents == 0)
+
+    lim_val, lim_zero = _dec(lim_tok)
+    ded_val, ded_zero = _dec(ded_tok)
+    prem_val, prem_zero = _dec(prem_tok)
+
+    if lim_zero and ded_zero and prem_zero:
+        return (None, None, None)
+    # Use empty string as None if parsing failed for a single field
+    return (
+        lim_val if lim_val != "" else None,
+        ded_val if ded_val != "" else None,
+        prem_val if prem_val != "" else None,
+    )
+
+
+def parse_last_ldp_block_with_zeros(text: str) -> tuple[str | None, str | None, str | None]:
+    """Same as parse_last_ldp_block, but if the triple is found and all three
+    values are zero, return ('0.00','0.00','0.00') instead of (None,None,None).
+    Useful for SAC240 where zeros should be kept as 0.00 per spec.
+    """
+    s = (text or "").rstrip()
+    if not s:
+        return (None, None, None)
+    window = s[-64:]
+    m = _re_ldp.search(r"(\d{11}[+-])(\d{11}[+-])(\d{11}[+-])\s*$", window)
+    if not m:
+        return (None, None, None)
+    lim_tok, ded_tok, prem_tok = m.groups()
+
+    def _dec(tok: str) -> tuple[str, bool]:
+        digits, sign = tok[:-1], tok[-1]
+        try:
+            cents = int(digits)
+        except Exception:
+            return ("", False)
+        val = cents / 100.0
+        if sign == '-':
+            val = -val
+        return (f"{val:.2f}", cents == 0)
+
+    lim_val, lim_zero = _dec(lim_tok)
+    ded_val, ded_zero = _dec(ded_tok)
+    prem_val, prem_zero = _dec(prem_tok)
+
+    if lim_val == "" or ded_val == "" or prem_val == "":
+        # parsing failure on any token
+        return (
+            lim_val if lim_val != "" else None,
+            ded_val if ded_val != "" else None,
+            prem_val if prem_val != "" else None,
+        )
+    if lim_zero and ded_zero and prem_zero:
+        return ("0.00", "0.00", "0.00")
+    return (lim_val, ded_val, prem_val)

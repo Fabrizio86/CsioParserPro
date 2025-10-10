@@ -142,7 +142,33 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
         # Regex-first mappers per record code
         consumed_text = None
         consumed_from = "cleaned"
-        if str(code) == "BIS":
+        # MHG header decoding (sender, receiver, broker, etc.)
+        if str(code) == "MHG":
+            import re as _re2
+            from .csio_utils import split_on_runs as _split, decode_csio_date_token as _dct, combine_date_time as _cdt
+            toks = _split(body)
+            if len(toks) >= 7:
+                _assign("sender_id", toks[0])
+                _assign("receiver_id", toks[1])
+                _assign("broker_id", toks[2])
+                _assign("company_code", toks[3])
+                _assign("standard", toks[4])
+                _assign("download_type", toks[5])
+                _assign("batch_seq", toks[6])
+                # Detect date/time tokens
+                file_dt = None
+                if len(toks) >= 8:
+                    d = _dct(toks[7])
+                    t = toks[8] if len(toks) >= 9 and _re2.match(r"^\d{6}$", toks[8]) else None
+                    file_dt = _cdt(d, t) if d and t else None
+                    if not file_dt and d:
+                        # No time token; set just the date
+                        file_dt = d + "T00:00:00"
+                if file_dt:
+                    out["file_datetime"] = file_dt
+                consumed_text = body
+                explain["matched"] = "MHG"
+        elif str(code) == "BIS":
             # Insured name from leading segment up to double-space. Use raw body to preserve spacing.
             # Skip optional leading 6-char sequence/agency token like B10001 or B10001?
             bis_m = _re.match(r"^\s*(?:[A-Z0-9]{6}\??\s+)?([A-Z0-9 ,&.'/-]+?)(?:\s{2,}|$)", body)
@@ -154,7 +180,7 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
                     _assign("insured_name", cand)
                     consumed_text = bis_m.group(0)
                     consumed_from = "body"
-        elif str(code) == "9BIS":
+        elif str(code) == "BIS" and str(level) == "9":
             addr_re = _re.compile(r"^(?P<street>.+?)\s{2,}(?P<city>[A-Z .'-]+?)\s{2,}(?P<province>[A-Z]{2})\s+(?P<postal>[A-Z]\d[A-Z]\s?\d[A-Z]\d).*$")
             mm = addr_re.match(body)
             if mm:
@@ -197,11 +223,25 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
                         removed += 1
                 if tmp:
                     out["desc_tail"] = tmp
-                # Map premium/limit
-                if out.get("amount_1") is not None:
-                    out["premium"] = out.get("amount_1")
-                if out.get("amount_2") is not None:
-                    out["limit"] = out.get("amount_2")
+                # Interpret trailing [limit][deductible][premium] 12-char blocks if present
+                try:
+                    from .csio_utils import parse_last_ldp_block_with_zeros as _ldp
+                    lim_v, ded_v, prem_v = _ldp(body)
+                except Exception:
+                    lim_v = ded_v = prem_v = None
+                if any(v is not None for v in (lim_v, ded_v, prem_v)):
+                    if lim_v is not None:
+                        out["limit"] = lim_v
+                    if ded_v is not None:
+                        out["deductible"] = ded_v
+                    if prem_v is not None:
+                        out["premium"] = prem_v
+                else:
+                    # Fallback: Map generic amount tokens
+                    if out.get("amount_1") is not None:
+                        out["premium"] = out.get("amount_1")
+                    if out.get("amount_2") is not None:
+                        out["limit"] = out.get("amount_2")
                 consumed_text = mm.group(0)
         elif str(code) == "CVH":
             cvh_re = _re.compile(r"^(?P<link_ref>[WRL]\d{5}HRUR\d{5})\s+(?P<coverage_code>[A-Z0-9]{2,6})\s+(?P<rest>.+)$")
@@ -238,6 +278,19 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
                 if yr: _assign("year", yr)
                 if mk: _assign("make", mk)
                 if mdl: _assign("model", mdl)
+                # Interpret trailing [limit][deductible][premium] triple block if present
+                try:
+                    from .csio_utils import parse_last_ldp_block as _ldp
+                    lim_v, ded_v, prem_v = _ldp(body)
+                except Exception:
+                    lim_v = ded_v = prem_v = None
+                if any(v is not None for v in (lim_v, ded_v, prem_v)):
+                    if lim_v is not None:
+                        out["limit"] = lim_v
+                    if ded_v is not None:
+                        out["deductible"] = ded_v
+                    if prem_v is not None:
+                        out["premium"] = prem_v
                 consumed_text = mm.group(0)
         elif str(code) == "AOI":
             aoi_re = _re.compile(r"^(?P<link_ref>[WRL]\d{5}(?:SAVR|HRUR)\d{5})\s+(?P<interest_code>\d{2,3}[A-Z]{0,2}).*?NT(?P<name>[^?]+?)\s{2,}(?P<rest>.*)$")
@@ -394,7 +447,29 @@ def parse_with_schema(lines: List[str], schema: Dict[str, Any]) -> Dict[str, pd.
         if h_postal: hints["postal"] = h_postal
         if h_cov and not h_cov.isdigit(): hints["coverage_guess"] = h_cov
         out["hints"] = hints if hints else None
-        rows.append(out)
+        # Continuation merge: if level == '9', merge into last non-9 row of same code
+        skip_append = False
+        if str(level) == '9':
+            for j in range(len(rows)-1, -1, -1):
+                prev = rows[j]
+                if prev.get("record_code") == code and str(prev.get("level")) != '9':
+                    base_keys = {"level","record_code","record_len","body","body_raw","provenance","explain","meaning","hints","link_key"}
+                    for k, v in out.items():
+                        if k in base_keys:
+                            continue
+                        if v in (None, ""):
+                            continue
+                        # Merge unknown_tail by concatenation; other fields fill if missing
+                        if k == "unknown_tail" and v:
+                            prev[k] = (prev.get(k) or "").strip()
+                            prev[k] = (prev[k] + (" " if prev[k] else "") + str(v)).strip()
+                        else:
+                            if not prev.get(k):
+                                prev[k] = v
+                    skip_append = True
+                    break
+        if not skip_append:
+            rows.append(out)
     all_df = pd.DataFrame(rows)
     out_dict: Dict[str, pd.DataFrame] = {"ALL": all_df, "ALL_RECORDS": all_df}
     for code, grp in all_df.groupby("record_code"):

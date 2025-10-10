@@ -27,6 +27,12 @@ def tokenize_records(raw: str) -> Iterator[Dict[str, Any]]:
         if body_end > n:
             body_end = min(n, body_start + rlen)
         body = raw[body_start:body_end]
+        # Clean payload by removing '?' runs and trimming whitespace as per UI requirements
+        try:
+            from .csio_utils import clean_payload as _clean_payload
+            body = _clean_payload(body)
+        except Exception:
+            body = body.strip()
         yield {"level": level, "record_code": code, "record_len": f"{rlen:03d}", "body": body}
         i = body_end
 
